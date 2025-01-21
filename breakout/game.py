@@ -1,13 +1,15 @@
 import glm
 from glfw.GLFW import *
 from enum import StrEnum
-from typing import Optional, Tuple
+from typing import Optional
 from breakout.sprite_renderer import SpriteRenderer
 from breakout.resource_manager import ResourceManager
 from breakout.game_object import GameObject
 from breakout.game_level import GameLevel
 from breakout.ball_object import BallObject
 from breakout.collision import check_ball_collision, Direction
+from breakout.particle import ParticleGenerator
+from breakout.post_processor import PostProcessor
 
 # Initial size of the player paddle
 PLAYER_SIZE = glm.vec2(100.0, 20.0)
@@ -41,22 +43,27 @@ class Game:
 
         self.player: Optional[GameObject] = None
         self.ball: Optional[BallObject] = None
+        self.particles: Optional[ParticleGenerator] = None
+        self.effects: Optional[PostProcessor] = None
+        
+        self.shake_time = 0.0
 
     def init(self) -> None:
         # initialize game state (load all shaders/textures/levels)
         
         # load shaders
         ResourceManager.load_shader("sprite", "breakout/shaders/sprite.vs", "breakout/shaders/sprite.fs")
+        ResourceManager.load_shader("particle", "breakout/shaders/particle.vs", "breakout/shaders/particle.fs")
+        ResourceManager.load_shader("postprocessing", "breakout/shaders/post_processing.vs", "breakout/shaders/post_processing.fs")
 
         # configure shaders
         projection = glm.ortho(0.0, float(self.width), float(self.height), 0.0, -1.0, 1.0)
-        shader = ResourceManager.get_shader("sprite")
-        shader.use()
-        shader.set_int("image", 0)
-        shader.set_mat4("projection", projection)
-
-        # set render-specific controls
-        self.renderer = SpriteRenderer(shader)
+        ResourceManager.get_shader("sprite").use()
+        ResourceManager.get_shader("sprite").set_int("image", 0)
+        ResourceManager.get_shader("sprite").set_mat4("projection", projection)
+        ResourceManager.get_shader("particle").use()
+        ResourceManager.get_shader("particle").set_int("sprite", 0)
+        ResourceManager.get_shader("particle").set_mat4("projection", projection)
 
         # load textures
         ResourceManager.load_texture("textures/background.jpg", False, "background")
@@ -64,6 +71,16 @@ class Game:
         ResourceManager.load_texture("textures/block.png", False, "block")
         ResourceManager.load_texture("textures/block_solid.png", False, "block_solid")
         ResourceManager.load_texture("textures/paddle.png", True, "paddle")
+        ResourceManager.load_texture("textures/particle.png", True, "particle")
+
+        # set render-specific controls
+        self.renderer = SpriteRenderer(ResourceManager.get_shader("sprite"))
+        self.particles = ParticleGenerator(
+            ResourceManager.get_shader("particle"),
+            ResourceManager.get_texture("particle"),
+            500
+        )
+        self.effects = PostProcessor(ResourceManager.get_shader("postprocessing"), self.width, self.height)
 
         # load levels
         self.levels.append(GameLevel("levels/1.lvl", self.width, self.height / 2))
@@ -106,7 +123,6 @@ class Game:
             if self.keys[GLFW_KEY_SPACE]:
                 self.ball.stuck = False
 
-
     def update(self, dt: float):
         # update objects
         self.ball.move(dt, self.width)
@@ -114,12 +130,24 @@ class Game:
         # check for collisions
         self.do_collisions()
 
+        # update particles
+        self.particles.update(dt, self.ball, 2, glm.vec2(self.ball.radius / 2.0))
+
+        # reduce shake time
+        if self.shake_time > 0.0:
+            self.shake_time -= dt
+            if self.shake_time <= 0.0:
+                self.effects.shake = False
+
         # check loss condition
         if self.ball.position.y >= self.height:  # did ball reach bottom edge ?
             self.reset_level()
             self.reset_player()
 
     def render(self):
+        # begin rendering to postprocessing framebuffer
+        self.effects.begin_render()
+
         # draw background
         self.renderer.draw_sprite(
             ResourceManager.get_texture("background"),
@@ -134,8 +162,17 @@ class Game:
         # draw player
         self.player.draw(self.renderer)
 
+        # draw particles
+        self.particles.draw()
+
         # draw ball
         self.ball.draw(self.renderer)
+
+        # end rendering to postprocessing framebuffer
+        self.effects.end_render()
+
+        # render postprocessing quad
+        self.effects.render(glfwGetTime())
     
     def do_collisions(self):
         for box in self.levels[self.level].bricks:
@@ -145,6 +182,9 @@ class Game:
                     # destroy block if not solid
                     if not box.is_solid:
                         box.destroyed = True
+                    else:  # if block is solid, enable shake effect
+                        self.shake_time = 0.05
+                        self.effects.shake = True
 
                     # collision resolution
                     direction = collision.direction
@@ -169,6 +209,19 @@ class Game:
                             self.ball.position.y += penetration  # move ball back down
 
         # check collisions for player pad (unless stuck)
+        result = check_ball_collision(self.ball, self.player)
+        if not self.ball.stuck and result.is_collided:
+            # check where it hit the board, and change velocity based on where it hit the board
+            center_board = self.player.position.x + self.player.size.x / 2.0
+            distance = (self.player.position.x + self.ball.radius) - center_board
+            percentage = distance / (self.player.size.x / 2.0)
+
+            # then move accordingly
+            strength = 2.0
+            old_velocity = self.ball.velocity
+            self.ball.velocity.x = INITIAL_BALL_VELOCITY.x * percentage * strength
+            self.ball.velocity.y = -1.0 * abs(self.ball.velocity.y)
+            self.ball.velocity = glm.normalize(self.ball.velocity) * glm.length(old_velocity)
 
     # reset
     def reset_level(self) -> None:

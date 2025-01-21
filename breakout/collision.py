@@ -42,6 +42,9 @@ def vector_direction(target: glm.vec2) -> Direction:
             fmax = dot_product
             best_match = i
 
+    if best_match == -1:
+        return Direction.UP
+
     return Direction(best_match)
 
 
