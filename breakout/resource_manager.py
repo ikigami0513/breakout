@@ -44,7 +44,8 @@ class ResourceManager:
 
         # properly delete all textures
         for texture in ResourceManager.textures.values():
-            glDeleteTextures(texture.id)
+            texture_id = np.array([texture.id], dtype=np.uint32)
+            glDeleteTextures(1, texture_id)
 
     # loads and generates a shader from file
     @staticmethod
