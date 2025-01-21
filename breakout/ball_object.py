@@ -45,27 +45,3 @@ class BallObject(GameObject):
         self.position = position
         self.velocity = velocity
         self.stuck = True
-
-    def check_collision(self, two: GameObject) -> bool:
-        # get center point circle first
-        center = glm.vec2(self.position + self.radius)
-
-        # calculate AABB info (center, half-extents)
-        aabb_half_extents = glm.vec2(two.size.x / 2.0, two.size.y / 2.0)
-        aabb_center = glm.vec2(
-            two.position.x + aabb_half_extents.x,
-            two.position.y + aabb_half_extents.y
-        )
-
-        # get difference vector between both centers
-        difference = center - aabb_center
-        clamped = glm.clamp(difference, -aabb_half_extents, aabb_half_extents)
-
-        # add clamped value to AABB_center and we get the value
-        # of box closest to circle
-        closest = aabb_center + clamped
-
-        # retrieve vector between center circle and closest
-        # point AABB and check if length <= radius
-        difference = closest - center
-        return glm.length(difference) < self.radius

@@ -36,14 +36,3 @@ class GameObject:
             self.color
         )
 
-    # AABB - AABB collision
-    def check_collision(self, two: 'GameObject') -> bool:
-        collisionX = (
-            self.position.x + self.size.x >= two.position.x and 
-            two.position.x + two.size.x >= self.position.x
-        )
-        collisionY = (
-            two.position.y + self.size.y >= two.position.y and
-            two.position.y + two.size.y >= self.position.y
-        )
-        return collisionX and collisionY

@@ -7,6 +7,7 @@ from breakout.resource_manager import ResourceManager
 from breakout.game_object import GameObject
 from breakout.game_level import GameLevel
 from breakout.ball_object import BallObject
+from breakout.collision import check_ball_collision, Direction
 
 # Initial size of the player paddle
 PLAYER_SIZE = glm.vec2(100.0, 20.0)
@@ -25,19 +26,6 @@ class GameState(StrEnum):
     GAME_ACTIVE = "GAME_ACTIVE"
     GAME_MENU = "GAME_MENU"
     GAME_WIN = "GAME_WIN"
-
-# represents the four possible (collision) directions
-class Direction(StrEnum):
-    UP = "UP"
-    RIGHT = "RIGHT"
-    DOWN = "DOWN"
-    LEFT = "LEFT"
-
-# Defines a Collision type that represents collision data
-# bool: collision ?
-# Direction: what direction ?
-# glm.vec2: difference vector center - closest point
-Collision = Tuple[bool, Direction, glm.vec2]
 
 class Game:
     def __init__(self, width: int, height: int):
@@ -78,10 +66,10 @@ class Game:
         ResourceManager.load_texture("textures/paddle.png", True, "paddle")
 
         # load levels
-        self.levels.append(GameLevel("levels/one.lvl", self.width, self.height / 2))
-        self.levels.append(GameLevel("levels/two.lvl", self.width, self.height / 2))
-        self.levels.append(GameLevel("levels/three.lvl", self.width, self.height / 2))
-        self.levels.append(GameLevel("levels/four.lvl", self.width, self.height / 2))
+        self.levels.append(GameLevel("levels/1.lvl", self.width, self.height / 2))
+        self.levels.append(GameLevel("levels/2.lvl", self.width, self.height / 2))
+        self.levels.append(GameLevel("levels/3.lvl", self.width, self.height / 2))
+        self.levels.append(GameLevel("levels/4.lvl", self.width, self.height / 2))
         self.level = 0
 
         player_pos = glm.vec2(
@@ -126,6 +114,11 @@ class Game:
         # check for collisions
         self.do_collisions()
 
+        # check loss condition
+        if self.ball.position.y >= self.height:  # did ball reach bottom edge ?
+            self.reset_level()
+            self.reset_player()
+
     def render(self):
         # draw background
         self.renderer.draw_sprite(
@@ -147,6 +140,50 @@ class Game:
     def do_collisions(self):
         for box in self.levels[self.level].bricks:
             if not box.destroyed:
-                if self.ball.check_collision(box):
+                collision = check_ball_collision(self.ball, box)
+                if collision.is_collided:
+                    # destroy block if not solid
                     if not box.is_solid:
                         box.destroyed = True
+
+                    # collision resolution
+                    direction = collision.direction
+                    diff_vector = collision.difference
+                    if direction == Direction.LEFT or direction == Direction.RIGHT:  # horizontal collision
+                        self.ball.velocity.x = -self.ball.velocity.x  # reverse horizontal velocity
+
+                        # relocate
+                        penetration = self.ball.radius - abs(diff_vector.x)
+                        if direction == Direction.LEFT:
+                            self.ball.position.x += penetration  # move ball to right
+                        else:
+                            self.ball.position.x -= penetration  # move ball to left
+                    else:  # vertical collision
+                        self.ball.velocity.y = -self.ball.velocity.y  # reverse vertical velocity
+
+                        # relocate
+                        penetration = self.ball.radius - abs(diff_vector.y)
+                        if direction == Direction.UP:
+                            self.ball.position.y -= penetration  # move ball back up
+                        else:
+                            self.ball.position.y += penetration  # move ball back down
+
+        # check collisions for player pad (unless stuck)
+
+    # reset
+    def reset_level(self) -> None:
+        self.levels[self.level].load(f"levels/{self.level + 1}.lvl", self.width, self.height / 2)
+
+    def reset_player(self) -> None:
+        # reset player stats
+        self.player.size = PLAYER_SIZE
+        self.player.position = glm.vec2(
+            self.width / 2.0 - PLAYER_SIZE.x / 2.0,
+            self.height - PLAYER_SIZE.y
+        )
+
+        # reset ball stats
+        self.ball.reset(
+            self.player.position + glm.vec2(PLAYER_SIZE.x / 2.0 - BALL_RADIUS, -(BALL_RADIUS * 2.0)),
+            INITIAL_BALL_VELOCITY
+        )        
