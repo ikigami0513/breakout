@@ -12,7 +12,7 @@ class GameObject:
         position: glm.vec2 = glm.vec2(0.0, 0.0),
         rotation: float = 0.0,
         size: glm.vec2 = glm.vec2(1.0, 1.0),
-        sprite: Optional[Texture2D] = None,
+        texture: Optional[Texture2D] = None,
         color: glm.vec3 = glm.vec3(1.0),
         velocity: glm.vec2 = glm.vec2(0.0, 0.0),
         is_solid: bool = False,
@@ -21,7 +21,7 @@ class GameObject:
         self.position = position
         self.rotation = rotation
         self.size = size
-        self.sprite = sprite
+        self.texture = texture
         self.color = color
         self.velocity = velocity
         self.is_solid = is_solid
@@ -29,7 +29,7 @@ class GameObject:
 
     def draw(self, renderer: SpriteRenderer) -> None:
         renderer.draw_sprite(
-            self.sprite,
+            self.texture,
             self.position,
             self.size,
             self.rotation,

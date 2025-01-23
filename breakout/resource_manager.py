@@ -1,5 +1,7 @@
 import numpy as np
+import threading
 from OpenGL.GL import *
+from pygame import mixer
 from PIL import Image
 from breakout.texture2d import Texture2D
 from breakout.shader import Shader
@@ -9,6 +11,7 @@ class ResourceManager:
     # resource storage
     shaders: dict[str, Shader] = {}
     textures: dict[str, Texture2D] = {}
+    audios: dict[str, mixer.Sound] = {}
 
     # loads (and generates) a shader program from file loading 
     # vertex, fragment (and geometry) shader's source code.
@@ -34,6 +37,18 @@ class ResourceManager:
     @staticmethod
     def get_texture(name: str) -> Optional[Texture2D]:
         return ResourceManager.textures.get(name)
+    
+    # loads an audio from file
+    def load_music(file: str, name: str) -> mixer.Sound:
+        ResourceManager.audios[name] = mixer.Sound(file)
+        return ResourceManager.audios[name]
+    
+    # play a stored music
+    @staticmethod
+    def play_music(name: str) -> None:
+        audio = ResourceManager.audios.get(name)
+        if audio:
+            audio.play()
 
     # properly de-allocates all loaded resources
     @staticmethod

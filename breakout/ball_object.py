@@ -3,6 +3,7 @@ from breakout.game_object import GameObject
 from breakout.texture2d import Texture2D
 from typing import Optional
 
+
 class BallObject(GameObject):
     def __init__(
         self,
@@ -10,16 +11,20 @@ class BallObject(GameObject):
         radius: float = 12.5,
         velocity: glm.vec2 = glm.vec2(0.0, 0.0),
         sprite: Optional[Texture2D] = None,
-        stuck: bool = True
+        stuck: bool = True,
+        sticky: bool = False,
+        pass_through: bool = False
     ):
         super().__init__(
             position=position, 
-            sprite=sprite, 
+            texture=sprite, 
             velocity=velocity,
             size=glm.vec2(radius * 2.0, radius * 2.0)
         )
         self.radius = radius
         self.stuck = stuck
+        self.sticky = sticky
+        self.pass_through = pass_through
 
     def move(self, dt: float, window_width: int) -> glm.vec2:
         # if not stuck to player board
@@ -45,3 +50,5 @@ class BallObject(GameObject):
         self.position = position
         self.velocity = velocity
         self.stuck = True
+        self.sticky = False
+        self.pass_through = False

@@ -1,4 +1,6 @@
 import glm
+import random
+import threading
 from glfw.GLFW import *
 from enum import StrEnum
 from typing import Optional
@@ -7,9 +9,10 @@ from breakout.resource_manager import ResourceManager
 from breakout.game_object import GameObject
 from breakout.game_level import GameLevel
 from breakout.ball_object import BallObject
-from breakout.collision import check_ball_collision, Direction
+from breakout.collision import check_ball_collision, Direction, check_collision
 from breakout.particle import ParticleGenerator
 from breakout.post_processor import PostProcessor
+from breakout.power_up import PowerUp
 
 # Initial size of the player paddle
 PLAYER_SIZE = glm.vec2(100.0, 20.0)
@@ -45,7 +48,8 @@ class Game:
         self.ball: Optional[BallObject] = None
         self.particles: Optional[ParticleGenerator] = None
         self.effects: Optional[PostProcessor] = None
-        
+        self.powerups: list[PowerUp] = []
+
         self.shake_time = 0.0
 
     def init(self) -> None:
@@ -72,6 +76,12 @@ class Game:
         ResourceManager.load_texture("textures/block_solid.png", False, "block_solid")
         ResourceManager.load_texture("textures/paddle.png", True, "paddle")
         ResourceManager.load_texture("textures/particle.png", True, "particle")
+        ResourceManager.load_texture("textures/powerup_speed.png", True, "powerup_speed")
+        ResourceManager.load_texture("textures/powerup_sticky.png", True, "powerup_sticky")
+        ResourceManager.load_texture("textures/powerup_increase.png", True, "powerup_increase")
+        ResourceManager.load_texture("textures/powerup_confuse.png", True, "powerup_confuse")
+        ResourceManager.load_texture("textures/powerup_chaos.png", True, "powerup_chaos")
+        ResourceManager.load_texture("textures/powerup_passthrough.png", True, "powerup_passthrough")
 
         # set render-specific controls
         self.renderer = SpriteRenderer(ResourceManager.get_shader("sprite"))
@@ -96,13 +106,22 @@ class Game:
         self.player = GameObject(
             position=player_pos,
             size=PLAYER_SIZE,
-            sprite=ResourceManager.get_texture("paddle")
+            texture=ResourceManager.get_texture("paddle")
         )
 
         ball_pos = player_pos + glm.vec2(
             PLAYER_SIZE.x / 2.0 - BALL_RADIUS, -BALL_RADIUS * 2.0
         )
         self.ball = BallObject(ball_pos, BALL_RADIUS, INITIAL_BALL_VELOCITY, ResourceManager.get_texture("face"))
+
+        # audio
+        ResourceManager.load_music("audio/breakout.mp3", "game_music")
+        ResourceManager.load_music("audio/bleep.mp3", "bleep1")  # the sound for when the ball hit a non-solid block. 
+        ResourceManager.load_music("audio/solid.wav", "solid")  # the sound for when the ball hit a solid block. 
+        ResourceManager.load_music("audio/powerup.wav", "powerup")  # the sound for when we the player paddle collided with a powerup block. 
+        ResourceManager.load_music("audio/bleep.wav", "bleep2")  # the sound for when we the ball bounces of the player paddle.
+
+        ResourceManager.play_music("game_music")
 
     def process_input(self, dt: float):
         if self.state == GameState.GAME_ACTIVE:
@@ -133,6 +152,9 @@ class Game:
         # update particles
         self.particles.update(dt, self.ball, 2, glm.vec2(self.ball.radius / 2.0))
 
+        # update powerups
+        self.update_power_ups(dt)
+
         # reduce shake time
         if self.shake_time > 0.0:
             self.shake_time -= dt
@@ -162,6 +184,11 @@ class Game:
         # draw player
         self.player.draw(self.renderer)
 
+        # draw powerups
+        for powerup in self.powerups:
+            if not powerup.destroyed:
+                powerup.draw(self.renderer)
+
         # draw particles
         self.particles.draw()
 
@@ -182,33 +209,51 @@ class Game:
                     # destroy block if not solid
                     if not box.is_solid:
                         box.destroyed = True
+                        self.spawn_power_ups(box)
+                        ResourceManager.play_music("bleep1")
                     else:  # if block is solid, enable shake effect
                         self.shake_time = 0.05
                         self.effects.shake = True
+                        ResourceManager.play_music("solid")
 
                     # collision resolution
                     direction = collision.direction
                     diff_vector = collision.difference
-                    if direction == Direction.LEFT or direction == Direction.RIGHT:  # horizontal collision
-                        self.ball.velocity.x = -self.ball.velocity.x  # reverse horizontal velocity
+                    if not (self.ball.pass_through and not box.is_solid):
+                        if direction == Direction.LEFT or direction == Direction.RIGHT:  # horizontal collision
+                            self.ball.velocity.x = -self.ball.velocity.x  # reverse horizontal velocity
 
-                        # relocate
-                        penetration = self.ball.radius - abs(diff_vector.x)
-                        if direction == Direction.LEFT:
-                            self.ball.position.x += penetration  # move ball to right
-                        else:
-                            self.ball.position.x -= penetration  # move ball to left
-                    else:  # vertical collision
-                        self.ball.velocity.y = -self.ball.velocity.y  # reverse vertical velocity
+                            # relocate
+                            penetration = self.ball.radius - abs(diff_vector.x)
+                            if direction == Direction.LEFT:
+                                self.ball.position.x += penetration  # move ball to right
+                            else:
+                                self.ball.position.x -= penetration  # move ball to left
+                        else:  # vertical collision
+                            self.ball.velocity.y = -self.ball.velocity.y  # reverse vertical velocity
 
-                        # relocate
-                        penetration = self.ball.radius - abs(diff_vector.y)
-                        if direction == Direction.UP:
-                            self.ball.position.y -= penetration  # move ball back up
-                        else:
-                            self.ball.position.y += penetration  # move ball back down
+                            # relocate
+                            penetration = self.ball.radius - abs(diff_vector.y)
+                            if direction == Direction.UP:
+                                self.ball.position.y -= penetration  # move ball back up
+                            else:
+                                self.ball.position.y += penetration  # move ball back down
 
-        # check collisions for player pad (unless stuck)
+        # also check collisions on PowerUps and if so, activate them
+        for powerup in self.powerups:
+            if not powerup.destroyed:
+                # first check if powerup passed bottom edge, if so: keep as inactive and destroy
+                if powerup.position.y >= self.height:
+                    powerup.destroyed = True
+
+                if check_collision(self.player, powerup):
+                    # collided with player, now activate powerup
+                    self.activate_power_up(powerup)
+                    powerup.destroyed = True
+                    powerup.activated = True
+                    ResourceManager.play_music("powerup")
+
+        # and finally check collisions for player pad (unless stuck)
         result = check_ball_collision(self.ball, self.player)
         if not self.ball.stuck and result.is_collided:
             # check where it hit the board, and change velocity based on where it hit the board
@@ -222,6 +267,11 @@ class Game:
             self.ball.velocity.x = INITIAL_BALL_VELOCITY.x * percentage * strength
             self.ball.velocity.y = -1.0 * abs(self.ball.velocity.y)
             self.ball.velocity = glm.normalize(self.ball.velocity) * glm.length(old_velocity)
+
+            # if Sticky powerup is activated, also stick ball to paddle once new velocity vectors were calculated
+            self.ball.stuck = self.ball.sticky
+
+            ResourceManager.play_music("bleep2")
 
     # reset
     def reset_level(self) -> None:
@@ -239,4 +289,127 @@ class Game:
         self.ball.reset(
             self.player.position + glm.vec2(PLAYER_SIZE.x / 2.0 - BALL_RADIUS, -(BALL_RADIUS * 2.0)),
             INITIAL_BALL_VELOCITY
-        )        
+        )
+
+    def should_spawn(self, chance: int) -> bool:
+        rdn = random.randint(0, chance - 1)
+        return rdn == 0
+
+    # powerups
+    def spawn_power_ups(self, block: GameObject) -> None:
+        if self.should_spawn(75):  # 1 in 75 chance
+            self.powerups.append(PowerUp(
+                type="speed",
+                color=glm.vec3(0.5, 0.5, 1.0),
+                duration=0.0,
+                position=block.position,
+                texture=ResourceManager.get_texture("powerup_speed")
+            ))
+        if self.should_spawn(75):
+            self.powerups.append(PowerUp(
+                type="sticky",
+                color=glm.vec3(1.0, 0.5, 1.0),
+                duration=20.0,
+                position=block.position,
+                texture=ResourceManager.get_texture("powerup_sticky")
+            ))
+        if self.should_spawn(75):
+            self.powerups.append(PowerUp(
+                type="pass-through",
+                color=glm.vec3(0.5, 1.0, 0/5),
+                duration=10.0,
+                position=block.position,
+                texture=ResourceManager.get_texture("powerup_passthrough")
+            ))
+        if self.should_spawn(75):
+            self.powerups.append(PowerUp(
+                type="pad-size-increase",
+                color=glm.vec3(1.0, 0.3, 0.3),
+                duration=0.0,
+                position=block.position,
+                texture=ResourceManager.get_texture("powerup_increase")
+            ))
+        # Negative powerups should spawn more often
+        if self.should_spawn(15):
+            self.powerups.append(PowerUp(
+                type="confuse",
+                color=glm.vec3(1.0, 0.3, 0.3),
+                duration=15.0,
+                position=block.position,
+                texture=ResourceManager.get_texture("powerup_confuse")
+            ))
+        if self.should_spawn(15):
+            self.powerups.append(PowerUp(
+                type="chaos",
+                color=glm.vec3(0.9, 0.25, 0.25),
+                duration=15.0,
+                position=block.position,
+                texture=ResourceManager.get_texture("powerup_chaos")
+            ))
+
+    def update_power_ups(self, dt: float) -> None:
+        for powerup in self.powerups:
+            powerup.position += powerup.velocity * dt
+            if powerup.activated:
+                powerup.duration -= dt
+
+                if powerup.duration <= 0.0:
+                    # remove powerup from list (will later be removed)
+                    powerup.activated = False
+
+                    # deactive effects
+                    if (
+                        powerup.type == "sticky" and 
+                        not self.is_other_powerup_active("sticky")
+                    ):
+                        self.ball.sticky = False
+                        self.player.color = glm.vec3(1.0)
+                    elif (
+                        powerup.type == "pass-through" and
+                        not self.is_other_powerup_active("path-through")
+                    ):
+                        self.ball.pass_through = False
+                        self.ball.color = glm.vec3(1.0)
+                    elif (
+                        powerup.type == "confuse" and
+                        not self.is_other_powerup_active("confuse")
+                    ):
+                        self.effects.confuse = False
+                    elif (
+                        powerup.type == "chaos" and
+                        not self.is_other_powerup_active("chaos")
+                    ):
+                        self.effects.chaos = False
+
+        # Remove all PowerUps from vector that are destroyed AND !activated (thus either off the map or finished)
+        self.powerups = [
+            powerup for powerup in self.powerups
+            if not (powerup.destroyed and not powerup.activated)
+        ]
+
+    def activate_power_up(self, powerup: PowerUp) -> None:
+        if powerup.type == "speed":
+            self.ball.velocity *= 1.2
+        elif powerup.type == "sticky":
+            self.ball.sticky = True
+            self.player.color = glm.vec3(1.0, 0.5, 1.0)
+        elif powerup.type == "pass-through":
+            self.ball.pass_through = True
+            self.ball.color = glm.vec3(1.0, 0.5, 0.5)
+        elif powerup.type == "pad-size-increase":
+            self.player.size.x += 50
+        elif powerup.type == "confuse":
+            if not self.effects.chaos:
+                # only activate if chaos wasn't already active
+                self.effects.confuse = True
+        elif powerup.type == "chaos":
+            if not self.effects.confuse:
+                self.effects.chaos = True
+
+    def is_other_powerup_active(self, type: str) -> bool:
+        # check if another PowerUp of the same type is still active
+        # in which case we don't disable its effect (yet)
+        for powerup in self.powerups:
+            if powerup.activated and powerup.type == type:
+                return True 
+        return False

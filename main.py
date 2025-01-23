@@ -1,7 +1,8 @@
 from OpenGL.GL import *
 from glfw.GLFW import *
 from glfw import _GLFWwindow as GLFWwindow
-from breakout.game import Game, GameState
+from pygame import mixer
+from breakout.game import Game
 from breakout.resource_manager import ResourceManager
 
 import platform
@@ -57,6 +58,9 @@ def main() -> None:
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+    # initialize audio mixer
+    mixer.init()
 
     # initialize game
     Breakout.init()

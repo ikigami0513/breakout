@@ -53,7 +53,7 @@ class GameLevel:
                     obj = GameObject(
                         position=pos,
                         size=size,
-                        sprite=ResourceManager.get_texture("block_solid"),
+                        texture=ResourceManager.get_texture("block_solid"),
                         color=glm.vec3(0.8, 0.8, 0.7),
                         is_solid=True
                     )
@@ -72,7 +72,7 @@ class GameLevel:
                     obj = GameObject(
                         position=pos,
                         size=size,
-                        sprite=ResourceManager.get_texture("block"),
+                        texture=ResourceManager.get_texture("block"),
                         color=color,
                         is_solid=False
                     )
