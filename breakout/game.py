@@ -1,6 +1,5 @@
 import glm
 import random
-import threading
 from glfw.GLFW import *
 from enum import StrEnum
 from typing import Optional
@@ -13,6 +12,7 @@ from breakout.collision import check_ball_collision, Direction, check_collision
 from breakout.particle import ParticleGenerator
 from breakout.post_processor import PostProcessor
 from breakout.power_up import PowerUp
+from breakout.text_renderer import TextRenderer
 
 # Initial size of the player paddle
 PLAYER_SIZE = glm.vec2(100.0, 20.0)
@@ -34,8 +34,10 @@ class GameState(StrEnum):
 
 class Game:
     def __init__(self, width: int, height: int):
-        self.state = GameState.GAME_ACTIVE
+        self.state = GameState.GAME_MENU
         self.keys = [False for _ in range(1024)]
+        self.keys_processed = [False for _ in range(1024)]
+        self.keys_processed = [False for _ in range(1024)]
         self.width = width
         self.height = height
 
@@ -44,11 +46,14 @@ class Game:
         self.levels: list[GameLevel] = []
         self.level: int = 0
 
+        self.lives = 3
+
         self.player: Optional[GameObject] = None
         self.ball: Optional[BallObject] = None
         self.particles: Optional[ParticleGenerator] = None
         self.effects: Optional[PostProcessor] = None
         self.powerups: list[PowerUp] = []
+        self.text: Optional[TextRenderer] = None
 
         self.shake_time = 0.0
 
@@ -91,6 +96,8 @@ class Game:
             500
         )
         self.effects = PostProcessor(ResourceManager.get_shader("postprocessing"), self.width, self.height)
+        self.text = TextRenderer(self.width, self.height)
+        self.text.load("fonts/ocraext.ttf", 24)
 
         # load levels
         self.levels.append(GameLevel("levels/1.lvl", self.width, self.height / 2))
@@ -124,6 +131,26 @@ class Game:
         ResourceManager.play_music("game_music")
 
     def process_input(self, dt: float):
+        if self.state == GameState.GAME_MENU:
+            if self.keys[GLFW_KEY_ENTER] and not self.keys_processed[GLFW_KEY_ENTER]:
+                self.state = GameState.GAME_ACTIVE
+                self.keys_processed[GLFW_KEY_ENTER] = True
+            if self.keys[GLFW_KEY_W] and not self.keys_processed[GLFW_KEY_W]:
+                self.level = (self.level + 1) % 4
+                self.keys_processed[GLFW_KEY_W] = True
+            if self.keys[GLFW_KEY_S] and not self.keys_processed[GLFW_KEY_S]:
+                if self.level > 0:
+                    self.level -= 1
+                else:
+                    self.level = 3
+                self.keys_processed[GLFW_KEY_S] = True
+
+        if self.state == GameState.GAME_WIN:
+            if self.keys[GLFW_KEY_ENTER]:
+                self.keys_processed[GLFW_KEY_ENTER] = True
+                self.effects.chaos = False
+                self.state = GameState.GAME_MENU
+
         if self.state == GameState.GAME_ACTIVE:
             velocity = PLAYER_VELOCITY * dt
 
@@ -163,44 +190,71 @@ class Game:
 
         # check loss condition
         if self.ball.position.y >= self.height:  # did ball reach bottom edge ?
-            self.reset_level()
+            self.lives -= 1
+            # did the player lose all hist lives ? : game over
+            if self.lives == 0:
+                self.reset_level()
+                self.state = GameState.GAME_MENU
             self.reset_player()
 
+        # check win condition
+        if self.state == GameState.GAME_ACTIVE and self.levels[self.level].is_completed():
+            self.reset_level()
+            self.reset_player()
+            self.effects.chaos = True
+            self.state = GameState.GAME_WIN
+
     def render(self):
-        # begin rendering to postprocessing framebuffer
-        self.effects.begin_render()
+        if (
+            self.state == GameState.GAME_ACTIVE or 
+            self.state == GameState.GAME_MENU or
+            self.state == GameState.GAME_WIN
+        ):
+            # begin rendering to postprocessing framebuffer
+            self.effects.begin_render()
 
-        # draw background
-        self.renderer.draw_sprite(
-            ResourceManager.get_texture("background"),
-            glm.vec2(0.0, 0.0),
-            glm.vec2(self.width, self.height),
-            0.0
-        )
+            # draw background
+            self.renderer.draw_sprite(
+                ResourceManager.get_texture("background"),
+                glm.vec2(0.0, 0.0),
+                glm.vec2(self.width, self.height),
+                0.0
+            )
 
-        # draw level
-        self.levels[self.level].draw(self.renderer)
+            # draw level
+            self.levels[self.level].draw(self.renderer)
 
-        # draw player
-        self.player.draw(self.renderer)
+            # draw player
+            self.player.draw(self.renderer)
 
-        # draw powerups
-        for powerup in self.powerups:
-            if not powerup.destroyed:
-                powerup.draw(self.renderer)
+            # draw powerups
+            for powerup in self.powerups:
+                if not powerup.destroyed:
+                    powerup.draw(self.renderer)
 
-        # draw particles
-        self.particles.draw()
+            # draw particles
+            self.particles.draw()
 
-        # draw ball
-        self.ball.draw(self.renderer)
+            # draw ball
+            self.ball.draw(self.renderer)
 
-        # end rendering to postprocessing framebuffer
-        self.effects.end_render()
+            # end rendering to postprocessing framebuffer
+            self.effects.end_render()
 
-        # render postprocessing quad
-        self.effects.render(glfwGetTime())
-    
+            # render postprocessing quad
+            self.effects.render(glfwGetTime())
+
+            # render text (don't include postprocessing)
+            self.text.render_text(f"Lives: {self.lives}", 5.0, 5.0, 1.0)
+
+        if self.state == GameState.GAME_MENU:
+            self.text.render_text("Press ENTER to start", 250.0, self.height / 2.0, 1.0)
+            self.text.render_text("Press W or S to select level", 245.0, self.height / 2.0 + 20.0, 0.75)
+
+        if self.state == GameState.GAME_WIN:
+            self.text.render_text("You WON!!!", 320.0, self.height / 2.0 - 20.0, 1.0, glm.vec3(0.0, 1.0, 0.0))
+            self.text.render_text("Press ENTER to retry or ESC to quit", 130.0, self.height / 2.0, 1.0, glm.vec3(1.0, 1.0, 0.0))
+
     def do_collisions(self):
         for box in self.levels[self.level].bricks:
             if not box.destroyed:
@@ -255,7 +309,7 @@ class Game:
 
         # and finally check collisions for player pad (unless stuck)
         result = check_ball_collision(self.ball, self.player)
-        if not self.ball.stuck and result.is_collided:
+        if not self.ball.stuck and result.is_collided and result.direction == Direction.UP:
             # check where it hit the board, and change velocity based on where it hit the board
             center_board = self.player.position.x + self.player.size.x / 2.0
             distance = (self.player.position.x + self.ball.radius) - center_board
@@ -276,6 +330,7 @@ class Game:
     # reset
     def reset_level(self) -> None:
         self.levels[self.level].load(f"levels/{self.level + 1}.lvl", self.width, self.height / 2)
+        self.lives = 3
 
     def reset_player(self) -> None:
         # reset player stats
@@ -301,7 +356,7 @@ class Game:
             self.powerups.append(PowerUp(
                 type="speed",
                 color=glm.vec3(0.5, 0.5, 1.0),
-                duration=0.0,
+                duration=5,
                 position=block.position,
                 texture=ResourceManager.get_texture("powerup_speed")
             ))
@@ -364,6 +419,11 @@ class Game:
                     ):
                         self.ball.sticky = False
                         self.player.color = glm.vec3(1.0)
+                    elif (
+                        powerup.type == "speed" and
+                        not self.is_other_powerup_active("speed")
+                    ):
+                        self.ball.velocity /= 1.2  
                     elif (
                         powerup.type == "pass-through" and
                         not self.is_other_powerup_active("path-through")

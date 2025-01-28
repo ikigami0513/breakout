@@ -1,0 +1,13 @@
+altgraph==0.17.4
+freetype-py==2.5.1
+glfw==2.8.0
+numpy==2.2.2
+packaging==24.2
+pillow==11.1.0
+pygame==2.6.1
+PyGLM==2.7.3
+pyinstaller==6.11.1
+pyinstaller-hooks-contrib==2025.0
+PyOpenGL==3.1.9
+PyOpenGL-accelerate==3.1.9
+setuptools==75.8.0

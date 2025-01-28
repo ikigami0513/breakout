@@ -1,5 +1,4 @@
 import numpy as np
-import threading
 from OpenGL.GL import *
 from pygame import mixer
 from PIL import Image
