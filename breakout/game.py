@@ -1,18 +1,13 @@
 import glm
 import random
-from glfw.GLFW import *
 from enum import StrEnum
-from typing import Optional
-from breakout.sprite_renderer import SpriteRenderer
-from breakout.resource_manager import ResourceManager
-from breakout.game_object import GameObject
-from breakout.game_level import GameLevel
-from breakout.ball_object import BallObject
-from breakout.collision import check_ball_collision, Direction, check_collision
-from breakout.particle import ParticleGenerator
-from breakout.post_processor import PostProcessor
+from OpenGL.GL import *
+from glfw.GLFW import *
+from elyria.game import *
+
 from breakout.power_up import PowerUp
-from breakout.text_renderer import TextRenderer
+from breakout.game_level import GameLevel
+
 
 # Initial size of the player paddle
 PLAYER_SIZE = glm.vec2(100.0, 20.0)
@@ -26,53 +21,27 @@ INITIAL_BALL_VELOCITY = glm.vec2(100.0, -350.0)
 # Radius of the ball object
 BALL_RADIUS = 12.5
 
+
 # represents the current state of the game
 class GameState(StrEnum):
     GAME_ACTIVE = "GAME_ACTIVE"
     GAME_MENU = "GAME_MENU"
     GAME_WIN = "GAME_WIN"
 
-class Game:
-    def __init__(self, width: int, height: int):
+
+class Breakout(Game):
+    def __init__(self) -> None:
+        super().__init__(800, 600)
+
         self.state = GameState.GAME_MENU
-        self.keys = [False for _ in range(1024)]
-        self.keys_processed = [False for _ in range(1024)]
-        self.keys_processed = [False for _ in range(1024)]
-        self.width = width
-        self.height = height
-
-        self.renderer: Optional[SpriteRenderer] = None
-
         self.levels: list[GameLevel] = []
         self.level: int = 0
-
         self.lives = 3
-
-        self.player: Optional[GameObject] = None
-        self.ball: Optional[BallObject] = None
-        self.particles: Optional[ParticleGenerator] = None
-        self.effects: Optional[PostProcessor] = None
-        self.powerups: list[PowerUp] = []
-        self.text: Optional[TextRenderer] = None
-
         self.shake_time = 0.0
-
-    def init(self) -> None:
-        # initialize game state (load all shaders/textures/levels)
+        self.powerups: list[PowerUp] = []
         
-        # load shaders
-        ResourceManager.load_shader("sprite", "breakout/shaders/sprite.vs", "breakout/shaders/sprite.fs")
-        ResourceManager.load_shader("particle", "breakout/shaders/particle.vs", "breakout/shaders/particle.fs")
-        ResourceManager.load_shader("postprocessing", "breakout/shaders/post_processing.vs", "breakout/shaders/post_processing.fs")
-
-        # configure shaders
-        projection = glm.ortho(0.0, float(self.width), float(self.height), 0.0, -1.0, 1.0)
-        ResourceManager.get_shader("sprite").use()
-        ResourceManager.get_shader("sprite").set_int("image", 0)
-        ResourceManager.get_shader("sprite").set_mat4("projection", projection)
-        ResourceManager.get_shader("particle").use()
-        ResourceManager.get_shader("particle").set_int("sprite", 0)
-        ResourceManager.get_shader("particle").set_mat4("projection", projection)
+    def init(self) -> None:
+        super().init()
 
         # load textures
         ResourceManager.load_texture("textures/background.jpg", False, "background")
@@ -88,16 +57,10 @@ class Game:
         ResourceManager.load_texture("textures/powerup_chaos.png", True, "powerup_chaos")
         ResourceManager.load_texture("textures/powerup_passthrough.png", True, "powerup_passthrough")
 
-        # set render-specific controls
-        self.renderer = SpriteRenderer(ResourceManager.get_shader("sprite"))
         self.particles = ParticleGenerator(
-            ResourceManager.get_shader("particle"),
             ResourceManager.get_texture("particle"),
             500
         )
-        self.effects = PostProcessor(ResourceManager.get_shader("postprocessing"), self.width, self.height)
-        self.text = TextRenderer(self.width, self.height)
-        self.text.load("fonts/ocraext.ttf", 24)
 
         # load levels
         self.levels.append(GameLevel("levels/1.lvl", self.width, self.height / 2))
@@ -105,6 +68,15 @@ class Game:
         self.levels.append(GameLevel("levels/3.lvl", self.width, self.height / 2))
         self.levels.append(GameLevel("levels/4.lvl", self.width, self.height / 2))
         self.level = 0
+
+        # audio
+        ResourceManager.load_music("audio/breakout.mp3", "game_music")
+        ResourceManager.load_music("audio/bleep.mp3", "bleep1")  # the sound for when the ball hit a non-solid block. 
+        ResourceManager.load_music("audio/solid.wav", "solid")  # the sound for when the ball hit a solid block. 
+        ResourceManager.load_music("audio/powerup.wav", "powerup")  # the sound for when we the player paddle collided with a powerup block. 
+        ResourceManager.load_music("audio/bleep.wav", "bleep2")  # the sound for when we the ball bounces of the player paddle.
+
+        ResourceManager.play_music("game_music")
 
         player_pos = glm.vec2(
             self.width / 2.0 - PLAYER_SIZE.x / 2.0,
@@ -121,16 +93,7 @@ class Game:
         )
         self.ball = BallObject(ball_pos, BALL_RADIUS, INITIAL_BALL_VELOCITY, ResourceManager.get_texture("face"))
 
-        # audio
-        ResourceManager.load_music("audio/breakout.mp3", "game_music")
-        ResourceManager.load_music("audio/bleep.mp3", "bleep1")  # the sound for when the ball hit a non-solid block. 
-        ResourceManager.load_music("audio/solid.wav", "solid")  # the sound for when the ball hit a solid block. 
-        ResourceManager.load_music("audio/powerup.wav", "powerup")  # the sound for when we the player paddle collided with a powerup block. 
-        ResourceManager.load_music("audio/bleep.wav", "bleep2")  # the sound for when we the ball bounces of the player paddle.
-
-        ResourceManager.play_music("game_music")
-
-    def process_input(self, dt: float):
+    def process_input(self, dt: float) -> None:
         if self.state == GameState.GAME_MENU:
             if self.keys[GLFW_KEY_ENTER] and not self.keys_processed[GLFW_KEY_ENTER]:
                 self.state = GameState.GAME_ACTIVE
@@ -169,7 +132,7 @@ class Game:
             if self.keys[GLFW_KEY_SPACE]:
                 self.ball.stuck = False
 
-    def update(self, dt: float):
+    def update(self, dt: float) -> None:
         # update objects
         self.ball.move(dt, self.width)
 
@@ -191,7 +154,7 @@ class Game:
         # check loss condition
         if self.ball.position.y >= self.height:  # did ball reach bottom edge ?
             self.lives -= 1
-            # did the player lose all hist lives ? : game over
+            # did the player lose all this lives ? : game over
             if self.lives == 0:
                 self.reset_level()
                 self.state = GameState.GAME_MENU
@@ -204,7 +167,7 @@ class Game:
             self.effects.chaos = True
             self.state = GameState.GAME_WIN
 
-    def render(self):
+    def render(self) -> None:
         if (
             self.state == GameState.GAME_ACTIVE or 
             self.state == GameState.GAME_MENU or
@@ -473,3 +436,4 @@ class Game:
             if powerup.activated and powerup.type == type:
                 return True 
         return False
+    

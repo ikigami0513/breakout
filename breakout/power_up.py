@@ -1,7 +1,5 @@
 import glm
-from breakout.game_object import GameObject
-from breakout.ball_object import BallObject
-from breakout.texture2d import Texture2D
+from elyria import GameObject, Texture2D
 
 
 # The size of a PowerUp block

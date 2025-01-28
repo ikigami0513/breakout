@@ -1,7 +1,8 @@
 import glm
-from breakout.texture2d import Texture2D
-from breakout.sprite_renderer import SpriteRenderer
+from elyria.texture2d import Texture2D
+from elyria.sprite_renderer import SpriteRenderer
 from typing import Optional
+
 
 # Container object for holding all state relevant for a single
 # game object entity. Each object in the game likely needs the

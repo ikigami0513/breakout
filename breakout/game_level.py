@@ -1,8 +1,7 @@
 import numpy as np
 import glm
-from breakout.game_object import GameObject
-from breakout.sprite_renderer import SpriteRenderer
-from breakout.resource_manager import ResourceManager
+from elyria import GameObject, SpriteRenderer, ResourceManager
+
 
 class GameLevel:
     def __init__(self, file: str, level_width: int, level_height: int):
@@ -83,3 +82,4 @@ class GameLevel:
             if not tile.is_solid and not tile.destroyed:
                 return False
         return True
+    

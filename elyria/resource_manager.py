@@ -2,9 +2,10 @@ import numpy as np
 from OpenGL.GL import *
 from pygame import mixer
 from PIL import Image
-from breakout.texture2d import Texture2D
-from breakout.shader import Shader
+from elyria.texture2d import Texture2D
+from elyria.shader import Shader
 from typing import Optional
+
 
 class ResourceManager:
     # resource storage

@@ -1,5 +1,5 @@
 from OpenGL.GL import *
-from typing import Optional
+
 
 class Texture2D:
     def __init__(

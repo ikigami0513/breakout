@@ -1,10 +1,12 @@
+import os
 import glm
 import freetype
 import numpy as np
 from OpenGL.GL import *
-from breakout.resource_manager import ResourceManager
-from breakout.texture2d import Texture2D
-from breakout.shader import Shader
+from elyria import base_dir
+from elyria.resource_manager import ResourceManager
+from elyria.texture2d import Texture2D
+from elyria.shader import Shader
 
 
 # Holds all state information relevant to a character as loaded using FreeType
@@ -36,8 +38,8 @@ class TextRenderer:
         # load and configure shader
         self.text_shader = ResourceManager.load_shader(
             "text",
-            "breakout/shaders/text_2d.vs", 
-            "breakout/shaders/text_2d.fs"
+            os.path.join(base_dir, "shaders", "text_2d.vs"),
+            os.path.join(base_dir, "shaders", "text_2d.fs")
         )
         self.text_shader.use()
         projection = glm.ortho(0.0, float(width), float(height), 0.0)

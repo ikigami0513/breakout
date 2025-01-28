@@ -1,8 +1,8 @@
 import glm
 from enum import Enum
 from typing import Tuple
-from breakout.game_object import GameObject
-from breakout.ball_object import BallObject
+from elyria.game_object import GameObject
+from elyria.ball_object import BallObject
 
 
 # represents the four possible (collision) directions

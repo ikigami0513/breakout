@@ -1,6 +1,7 @@
 from OpenGL.GL import *
 import glm
 
+
 class Shader:
     def __init__(self, vertex_path: str, fragment_path: str, geometry_path: str = None) -> None:
         # 1. retrieve the vertex/fragment source code from filepath

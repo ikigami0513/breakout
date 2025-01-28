@@ -2,9 +2,10 @@ import glm
 import numpy as np
 import random
 from OpenGL.GL import *
-from breakout.shader import Shader
-from breakout.texture2d import Texture2D
-from breakout.game_object import GameObject
+from elyria.shader import Shader
+from elyria.texture2d import Texture2D
+from elyria.game_object import GameObject
+from elyria.resource_manager import ResourceManager
 
 
 # Represents a single particle and its state
@@ -26,8 +27,8 @@ class Particle:
 # particles by repeatedly spawing and updating particles and killing
 # them after a given amount of time.
 class ParticleGenerator:
-    def __init__(self, shader: Shader, texture: Texture2D, amount: int):
-        self.shader = shader
+    def __init__(self, texture: Texture2D, amount: int, shader: Shader = None):
+        self.shader = shader if shader else ResourceManager.get_shader("particle")
         self.texture = texture
         self.amount = amount
 

@@ -1,10 +1,11 @@
 import glm
 import numpy as np
 from OpenGL.GL import *
-from breakout.texture2d import Texture2D
-from breakout.sprite_renderer import SpriteRenderer
-from breakout.shader import Shader
+from elyria.texture2d import Texture2D
+from elyria.sprite_renderer import SpriteRenderer
+from elyria.shader import Shader
 from typing import Optional
+
 
 class PostProcessor:
     def __init__(

@@ -2,8 +2,8 @@ from OpenGL.GL import *
 from glfw.GLFW import *
 from glfw import _GLFWwindow as GLFWwindow
 from pygame import mixer
-from breakout.game import Game as GameClass
-from breakout.resource_manager import ResourceManager
+from elyria.game import Game as GameClass
+from elyria.resource_manager import ResourceManager
 from typing import Optional
 
 import platform

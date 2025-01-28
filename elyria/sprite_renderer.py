@@ -1,8 +1,9 @@
 from OpenGL.GL import *
-from breakout.shader import Shader
-from breakout.texture2d import Texture2D
+from elyria.shader import Shader
+from elyria.texture2d import Texture2D
 import glm
 import numpy as np
+
 
 class SpriteRenderer:
     def __init__(self, shader: Shader) -> None:

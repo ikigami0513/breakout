@@ -1,6 +1,6 @@
 import glm
-from breakout.game_object import GameObject
-from breakout.texture2d import Texture2D
+from elyria.game_object import GameObject
+from elyria.texture2d import Texture2D
 from typing import Optional
 
 
